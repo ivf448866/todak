@@ -25,11 +25,13 @@
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "nativewind-env.d.ts"
   ],
   "exclude": [
     "node_modules",
     "build",
     "dist"
-  ]
+  ],
+  "extends": "expo/tsconfig.base"
 }
