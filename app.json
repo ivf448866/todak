@@ -2,7 +2,7 @@
   "expo": {
     "name": "토닥",
     "slug": "todak",
-    "owner": "YOUR_EXPO_USERNAME",
+    "owner": "yoel-ivf",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "sdkVersion"
@@ -100,7 +100,7 @@
 
     "updates": {
       "enabled": true,
-      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID",
+      "url": "https://u.expo.dev/09e5d560-3f8f-49cb-b0ad-afc3393356dc",
       "fallbackToCacheTimeout": 0,
       "checkAutomatically": "ON_LOAD"
     },
@@ -110,7 +110,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "09e5d560-3f8f-49cb-b0ad-afc3393356dc"
       }
     }
   }

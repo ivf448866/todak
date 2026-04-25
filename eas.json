@@ -4,12 +4,7 @@
     "appVersionSource": "local"
   },
   "build": {
-    "base": {
-      "node": "20.x"
-    },
-
     "development": {
-      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
@@ -27,7 +22,6 @@
     },
 
     "preview": {
-      "extends": "base",
       "distribution": "internal",
       "channel": "preview",
       "env": {
@@ -43,7 +37,6 @@
     },
 
     "production": {
-      "extends": "base",
       "distribution": "store",
       "channel": "production",
       "autoIncrement": true,
