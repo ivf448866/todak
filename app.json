@@ -1,0 +1,117 @@
+{
+  "expo": {
+    "name": "토닥",
+    "slug": "todak",
+    "owner": "YOUR_EXPO_USERNAME",
+    "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+
+    "icon": "./assets/icon.png",
+    "scheme": "todak",
+
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#faf8f5"
+    },
+
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+
+    "ios": {
+      "supportsTabletMode": false,
+      "bundleIdentifier": "com.todak.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "상담사와 화상 통화를 위해 카메라를 사용합니다.",
+        "NSMicrophoneUsageDescription": "상담사와 음성·화상 통화를 위해 마이크를 사용합니다.",
+        "NSPhotoLibraryUsageDescription": "프로필 사진 변경을 위해 사진 라이브러리에 접근합니다.",
+        "UIBackgroundModes": [
+          "remote-notification",
+          "audio"
+        ]
+      },
+      "associatedDomains": [
+        "applinks:todak.app"
+      ]
+    },
+
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#faf8f5"
+      },
+      "package": "com.todak.app",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.INTERNET",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ],
+      "googleServicesFile": "./google-services.json",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "todak.app",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://todak.app"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#3d2c1e",
+          "defaultChannel": "todak",
+          "androidMode": "default",
+          "androidCollapsedTitle": "토닥 알림"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "상담사와 음성·화상 통화를 위해 마이크를 사용합니다."
+        }
+      ]
+    ],
+
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID",
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
+
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    }
+  }
+}
