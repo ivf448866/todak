@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 const C = {
   cream: '#faf8f5', brown: '#3d2c1e', brownLight: '#5a4633',
@@ -51,6 +52,13 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
+        {/* Supabase 미설정 배너 */}
+        {!isSupabaseConfigured && (
+          <View style={s.setupBanner}>
+            <Text style={s.setupBannerText}>⚠️ .env.local에 Supabase URL과 KEY를 설정해야 로그인이 가능합니다.</Text>
+          </View>
+        )}
+
         {/* Logo */}
         <View style={s.logoWrap}>
           <Text style={s.logo}>토닥</Text>
@@ -168,6 +176,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 48,
   },
+  setupBanner: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  setupBannerText: { fontSize: 12, color: '#92400e', lineHeight: 18 },
   logoWrap: { alignItems: 'center', marginBottom: 40 },
   logo: { fontSize: 40, fontWeight: '900', color: C.brown, letterSpacing: 4 },
   tagline: { fontSize: 13, color: C.brownPale, marginTop: 4 },

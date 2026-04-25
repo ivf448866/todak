@@ -2,12 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/database';
 
 // Supabase 클라이언트 초기화
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'placeholder';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase 환경 변수가 설정되지 않았습니다.');
-  console.warn('EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY를 .env.local에 설정하세요.');
+export const isSupabaseConfigured =
+  supabaseUrl !== 'https://placeholder.supabase.co' &&
+  !supabaseUrl.includes('placeholder') &&
+  supabaseAnonKey !== 'placeholder';
+
+if (!isSupabaseConfigured) {
+  console.warn('[토닥] Supabase 미설정: .env.local에 실제 URL과 KEY를 입력하세요.');
 }
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
