@@ -24,8 +24,7 @@
     ],
 
     "ios": {
-      "supportsTabletMode": false,
-      "bundleIdentifier": "com.todak.app",
+"bundleIdentifier": "com.todak.app",
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "상담사와 화상 통화를 위해 카메라를 사용합니다.",
@@ -56,8 +55,7 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
-      "googleServicesFile": "./google-services.json",
-      "intentFilters": [
+"intentFilters": [
         {
           "action": "VIEW",
           "autoVerify": true,
