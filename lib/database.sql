@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
-  CONSTRAINT booking_scheduled_future CHECK (scheduled_at > NOW())
+  CONSTRAINT booking_scheduled_not_null CHECK (scheduled_at IS NOT NULL)
 );
 
 -- ============================================
@@ -168,7 +168,7 @@ CREATE POLICY "Counselors can update own profile"
 -- 정책 3: 사용자는 자신의 경청사 프로필만 생성 가능
 CREATE POLICY "Counselors can insert own profile"
   ON counselors FOR INSERT
-  WITH CHECK (auth.uid() = counselor_id);
+  WITH CHECK (auth.uid() = id);
 
 -- ============================================
 -- [RLS 정책] bookings 테이블
@@ -251,10 +251,11 @@ DECLARE
   new_rating NUMERIC;
   new_count INT;
 BEGIN
-  SELECT AVG(rating)::NUMERIC(3,2), COUNT(*) INTO new_rating, new_count
-  FROM reviews
-  WHERE booking_id IN (
-    SELECT id FROM bookings WHERE counselor_id = NEW.booking_id
+  SELECT AVG(r.rating)::NUMERIC(3,2), COUNT(*) INTO new_rating, new_count
+  FROM reviews r
+  JOIN bookings b ON b.id = r.booking_id
+  WHERE b.counselor_id = (
+    SELECT counselor_id FROM bookings WHERE id = NEW.booking_id
   );
 
   UPDATE counselors
