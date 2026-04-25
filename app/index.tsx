@@ -1,9 +1,5 @@
-import { View, ActivityIndicator } from 'react-native';
+import { Redirect } from 'expo-router';
 
 export default function Index() {
-  return (
-    <View style={{ flex: 1, backgroundColor: '#faf8f5', alignItems: 'center', justifyContent: 'center' }}>
-      <ActivityIndicator size="large" color="#3d2c1e" />
-    </View>
-  );
+  return <Redirect href="/login" />;
 }

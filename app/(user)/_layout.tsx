@@ -1,19 +1,24 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
+import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
-import {
-  registerPushToken,
-  setupNotificationResponseHandler,
-} from '@/lib/notifications';
+import { registerPushToken, setupNotificationResponseHandler } from '@/lib/notifications';
 
 export default function UserLayout() {
-  const { user } = useAuthStore();
+  const { user, loading, initialize } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, []);
 
   useEffect(() => {
     if (!user?.id) return;
     registerPushToken(user.id);
     return setupNotificationResponseHandler();
   }, [user?.id]);
+
+  if (loading) return null;
+  if (!user) return <Redirect href="/login" />;
 
   return (
     <Stack
