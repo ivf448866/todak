@@ -431,7 +431,7 @@ export default function SessionScreen() {
       });
       if (error) throw error;
       setPhase('ended');
-      router.replace('/(user)/' as any);
+      router.replace('/(user)/home' as any);
     } catch (err: any) {
       Alert.alert('오류', err.message ?? '리뷰 등록에 실패했어요.');
     } finally {
@@ -441,7 +441,7 @@ export default function SessionScreen() {
 
   const skipReview = () => {
     setPhase('ended');
-    router.replace('/(user)/' as any);
+    router.replace('/(user)/home' as any);
   };
 
   // ─────────────────────────────────────────────────────────────────────────

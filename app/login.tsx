@@ -32,7 +32,7 @@ export default function LoginScreen() {
         if (user?.role === 'counselor') {
           router.replace('/(counselor)/dashboard');
         } else {
-          router.replace('/(user)/');
+          router.replace('/(user)/home');
         }
       } else {
         if (!name.trim()) { Alert.alert('이름을 입력해주세요'); return; }

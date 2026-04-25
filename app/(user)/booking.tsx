@@ -612,7 +612,7 @@ export default function BookingScreen() {
             )}
             <TouchableOpacity
               style={s.secondaryBtn}
-              onPress={() => router.replace('/(user)/' as any)}
+              onPress={() => router.replace('/(user)/home' as any)}
             >
               <Text style={s.secondaryBtnText}>홈으로 돌아가기</Text>
             </TouchableOpacity>

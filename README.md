@@ -11,6 +11,7 @@
 ## 📱 기술 스택
 
 ### Frontend
+
 - **Framework**: React Native (Expo SDK 51)
 - **라우팅**: Expo Router (파일 기반 라우팅)
 - **상태관리**: Zustand
@@ -18,12 +19,14 @@
 - **언어**: TypeScript
 
 ### Backend
+
 - **Database**: Supabase (PostgreSQL)
 - **인증**: Supabase Auth
 - **파일 저장**: Supabase Storage
 - **실시간**: Supabase Realtime
 
 ### 주요 통합 서비스
+
 - **결제**: Toss Payments SDK
 - **화상통화**: Daily.co WebRTC SDK
 
@@ -67,6 +70,7 @@ todak/
 ## 🚀 시작하기
 
 ### 사전 요구사항
+
 - Node.js 18 이상
 - npm 또는 yarn
 - Expo CLI (`npm install -g expo-cli`)
@@ -86,8 +90,8 @@ yarn install
 
 ```env
 # Supabase
-EXPO_PUBLIC_SUPABASE_URL=your_supabase_project_url
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+EXPO_PUBLIC_SUPABASE_URL=http://ljdlwmzuzwkogdfszivv.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqZGx3bXp1endrb2dkZnN6aXZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwOTAxODYsImV4cCI6MjA5MjY2NjE4Nn0.Wu9TjGEO-AeDq2po9aL6-rojSUURrkh5EYt6ixKJLFk
 
 # Daily.co
 EXPO_PUBLIC_DAILY_API_KEY=your_daily_api_key
@@ -118,23 +122,28 @@ npm run web
 ## 📚 주요 파일 설명
 
 ### `lib/supabase.ts`
+
 - Supabase 클라이언트 초기화
 - 인증, 사용자 프로필, 예약, 세션 등의 CRUD 작업
 - 실시간 구독 기능
 
 ### `stores/authStore.ts`
+
 - Zustand를 사용한 인증 상태 관리
 - 회원가입, 로그인, 로그아웃, 프로필 업데이트
 
 ### `stores/bookingStore.ts`
+
 - 예약 관련 상태 관리
 - 예약 생성, 조회, 상태 업데이트
 
 ### `lib/toss.ts`
+
 - 토스페이먼츠 결제 API 통합
 - 결제 요청, 확인, 취소, 조회
 
 ### `lib/daily.ts`
+
 - Daily.co 화상통화 API 통합
 - 룸 생성 및 관리
 - 세션 토큰 생성
@@ -145,18 +154,23 @@ npm run web
 ### 주요 테이블
 
 #### `users`
+
 - id, email, name, role, avatar_url, phone, created_at, updated_at
 
 #### `counselors`
+
 - id, bio, specialties, hourly_rate, rating, reviews_count, total_sessions, is_verified, license_number, profile_image_url
 
 #### `bookings`
+
 - id, user_id, counselor_id, scheduled_at, duration_minutes, status, amount, notes, created_at, updated_at
 
 #### `sessions`
+
 - id, booking_id, user_id, counselor_id, status, started_at, ended_at, room_url, recording_url, notes, created_at, updated_at
 
 #### 기타 테이블
+
 - `availability` - 경청사의 가용 시간
 - `reviews` - 리뷰
 - `education_courses` - 교육 과정
@@ -189,15 +203,18 @@ npm run web
 ## 📝 컨벤션
 
 ### 파일명
+
 - 컴포넌트: PascalCase (e.g., `UserCard.tsx`)
 - 유틸리티: camelCase (e.g., `formatDate.ts`)
 - 페이지: camelCase or kebab-case (Expo Router 규칙 따름)
 
 ### 타입 정의
+
 - 모든 타입은 `types/index.ts`에서 관리
 - 외부 라이브러리 타입은 명시적으로 import
 
 ### 상태 관리
+
 - Zustand store는 `stores/` 디렉토리에 위치
 - 스토어 이름은 `*Store.ts` 형식
 
@@ -210,6 +227,7 @@ npm test
 ## 📦 빌드
 
 ### 프로덕션 빌드
+
 ```bash
 # iOS
 eas build --platform ios
@@ -221,6 +239,7 @@ eas build --platform android
 ## 🔧 문제 해결
 
 ### 의존성 문제
+
 ```bash
 npm install --force
 # 또는
@@ -228,11 +247,13 @@ rm -rf node_modules package-lock.json && npm install
 ```
 
 ### TypeScript 에러
+
 ```bash
 tsc --noEmit
 ```
 
 ### Expo 캐시 초기화
+
 ```bash
 expo start -c
 ```

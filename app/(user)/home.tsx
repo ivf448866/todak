@@ -57,7 +57,7 @@ const C = {
 const CATEGORIES: CategoryFilter[] = ['전체', '직장', '연애', '가족', '진로'];
 
 const TABS: TabItem[] = [
-  { id: 'home', icon: '🏠', label: '홈', route: '/(user)/' },
+  { id: 'home', icon: '🏠', label: '홈', route: '/(user)/home' },
   { id: 'booking', icon: '📅', label: '예약내역', route: '/(user)/booking' },
   { id: 'chat', icon: '💬', label: '채팅', route: '/(user)/chat' },
   { id: 'mypage', icon: '👤', label: '마이페이지', route: '/(user)/mypage' },
