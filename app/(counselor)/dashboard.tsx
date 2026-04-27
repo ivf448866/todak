@@ -19,13 +19,9 @@ export default function CounselorDashboardScreen() {
   const [loadingStats, setLoadingStats] = useState(false);
 
   useEffect(() => {
-    if (user?.role !== 'counselor') {
-      router.replace('/(user)');
-      return;
-    }
-
+    if (!user?.id || user.role !== 'counselor') return;
     fetchStats();
-  }, [user]);
+  }, [user?.id]);
 
   const fetchStats = async () => {
     try {
@@ -70,7 +66,7 @@ export default function CounselorDashboardScreen() {
             안녕하세요, {user?.name}님
           </Text>
           <Text className="text-sm text-gray-500 mt-2">
-            경청사 대시보드
+            상담사 대시보드
           </Text>
         </View>
 

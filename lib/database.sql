@@ -21,10 +21,14 @@ CREATE TABLE IF NOT EXISTS users (
   role user_role NOT NULL,
   name TEXT NOT NULL,
   avatar_emoji TEXT,
+  avatar_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  
+
   CONSTRAINT users_name_not_empty CHECK (name <> '')
 );
+
+-- 기존 DB에 컬럼 추가 (이미 존재하면 무시)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 -- ============================================
 -- [테이블 2] counselors (경청사)
@@ -525,3 +529,104 @@ CREATE TRIGGER trigger_check_certification
 -- ('경청 기초', '경청 상담의 기본 개념 학습', 120, true, 1),
 -- ('소통 스킬', '효과적인 의사소통 기법', 90, true, 2),
 -- ('위기 상담', '위기 상황 대응 방법', 60, false, 3);
+
+-- ============================================
+-- [어드민] user_role에 admin 추가
+-- ============================================
+-- Supabase SQL Editor에서 실행:
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin';
+
+-- ============================================
+-- [테이블 9] notices (공지사항)
+-- ============================================
+CREATE TABLE IF NOT EXISTS notices (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title       TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  is_pinned   BOOLEAN DEFAULT false,
+  target_role TEXT  DEFAULT 'all'
+                    CHECK (target_role IN ('all', 'user', 'counselor')),
+  created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  CONSTRAINT notices_title_not_empty   CHECK (title   <> ''),
+  CONSTRAINT notices_content_not_empty CHECK (content <> '')
+);
+
+CREATE INDEX IF NOT EXISTS idx_notices_is_pinned  ON notices(is_pinned DESC);
+CREATE INDEX IF NOT EXISTS idx_notices_created_at ON notices(created_at DESC);
+
+ALTER TABLE notices ENABLE ROW LEVEL SECURITY;
+
+-- 모든 인증 사용자는 공지 조회 가능
+CREATE POLICY "Authenticated users can view notices"
+  ON notices FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+-- 어드민 helper 함수 (RLS에서 재사용)
+CREATE OR REPLACE FUNCTION is_admin()
+RETURNS BOOLEAN AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM users WHERE id = auth.uid() AND role = 'admin'
+  );
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- 어드민만 공지 작성/수정/삭제 가능
+CREATE POLICY "Admins can insert notices"
+  ON notices FOR INSERT
+  WITH CHECK (is_admin());
+
+CREATE POLICY "Admins can update notices"
+  ON notices FOR UPDATE
+  USING (is_admin());
+
+CREATE POLICY "Admins can delete notices"
+  ON notices FOR DELETE
+  USING (is_admin());
+
+-- ============================================
+-- [어드민 RLS] courses 테이블 — 어드민 CRUD 허용
+-- ============================================
+CREATE POLICY "Admins can insert courses"
+  ON courses FOR INSERT
+  WITH CHECK (is_admin());
+
+CREATE POLICY "Admins can update courses"
+  ON courses FOR UPDATE
+  USING (is_admin());
+
+CREATE POLICY "Admins can delete courses"
+  ON courses FOR DELETE
+  USING (is_admin());
+
+-- ============================================
+-- [어드민 RLS] counselors 테이블 — 어드민 UPDATE 허용
+-- ============================================
+CREATE POLICY "Admins can update counselors"
+  ON counselors FOR UPDATE
+  USING (is_admin());
+
+-- ============================================
+-- [어드민 RLS] users 테이블 — 어드민 전체 조회 허용
+-- ============================================
+CREATE POLICY "Admins can view all users"
+  ON users FOR SELECT
+  USING (is_admin());
+
+-- ============================================
+-- [어드민 RLS] bookings — 어드민 전체 조회 허용
+-- ============================================
+CREATE POLICY "Admins can view all bookings"
+  ON bookings FOR SELECT
+  USING (is_admin());
+
+-- ============================================
+-- [어드민 RLS] settlements — 어드민 전체 조회/수정 허용
+-- ============================================
+CREATE POLICY "Admins can view all settlements"
+  ON settlements FOR SELECT
+  USING (is_admin());
+
+CREATE POLICY "Admins can update settlements"
+  ON settlements FOR UPDATE
+  USING (is_admin());

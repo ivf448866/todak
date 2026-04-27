@@ -5,7 +5,7 @@
  * 지난 주(월~일) 완료된 상담을 집계해 counselor별 정산 레코드를 생성한다.
  *
  * 정산 정책:
- *   - 이용자 결제금액의 62%를 경청사에게 지급 (플랫폼 수수료 38%)
+ *   - 이용자 결제금액의 62%를 상담사에게 지급 (플랫폼 수수료 38%)
  *   - 최소 정산 금액 10,000원 미만 → 정산 건너뜀
  *   - 같은 기간 중복 정산 방지 (UNIQUE 제약 + 사전 체크)
  *
@@ -113,7 +113,7 @@ serve(async (req: Request) => {
       return json({ success: true, message: '정산할 예약 없음', period: { start: periodStartStr, end: periodEndStr }, results: [] });
     }
 
-    // ── 2. 경청사별 집계 ──────────────────────────────────────────────────
+    // ── 2. 상담사별 집계 ──────────────────────────────────────────────────
     const grouped = new Map<string, { sessions: number; gross: number }>();
     for (const b of bookings as BookingRow[]) {
       const existing = grouped.get(b.counselor_id) ?? { sessions: 0, gross: 0 };
@@ -123,14 +123,14 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── 3. 경청사 정보 일괄 조회 ──────────────────────────────────────────
+    // ── 3. 상담사 정보 일괄 조회 ──────────────────────────────────────────
     const counselorIds = [...grouped.keys()];
     const { data: counselors, error: counselorsErr } = await db
       .from('counselors')
       .select('id, bank_name, account_number, users(name)')
       .in('id', counselorIds);
 
-    if (counselorsErr) throw new Error(`경청사 조회 실패: ${counselorsErr.message}`);
+    if (counselorsErr) throw new Error(`상담사 조회 실패: ${counselorsErr.message}`);
 
     const counselorMap = new Map<string, CounselorRow>(
       (counselors ?? []).map((c: CounselorRow) => [c.id, c])
@@ -192,7 +192,7 @@ serve(async (req: Request) => {
       // 앱에서 expo_push_token을 counselors 테이블에 저장한 경우 전송
       const token = (counselor as any)?.expo_push_token as string | undefined;
       if (token) {
-        const name = (counselor?.users as any)?.name ?? '경청사';
+        const name = (counselor?.users as any)?.name ?? '상담사';
         await sendPush({
           to:    token,
           title: '이번 주 정산이 완료됐어요 💰',

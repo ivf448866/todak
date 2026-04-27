@@ -136,7 +136,7 @@ export default function EducationListScreen() {
           <View style={s.certRow}>
             <Text style={{ fontSize: 28, marginRight: 14 }}>🏅</Text>
             <View>
-              <Text style={s.certDoneTitle}>인증 경청사</Text>
+              <Text style={s.certDoneTitle}>인증 상담사</Text>
               <Text style={s.certDoneSub}>모든 필수 과정을 이수했어요</Text>
             </View>
           </View>

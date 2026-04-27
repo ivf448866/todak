@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 import { Database } from '../types/database';
 
 // Supabase 클라이언트 초기화
@@ -18,17 +19,35 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
+    flowType: 'pkce',
+    detectSessionInUrl: true,  // 웹 OAuth 콜백 URL의 code를 자동으로 세션으로 교환
   },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
+  // 웹에서는 WebSocket 연결 시도 자체를 막음
+  realtime: Platform.OS !== 'web'
+    ? { params: { eventsPerSecond: 10 } }
+    : { timeout: 0, params: { eventsPerSecond: 0 } },
 });
+
+// 웹에서 realtime이 혹시 열리면 즉시 끊음
+if (Platform.OS === 'web') {
+  supabase.realtime.disconnect();
+}
 
 // ============================================
 // 인증 관련 함수
 // ============================================
+
+/**
+ * Google OAuth URL 생성 (native: skipBrowserRedirect, web: 직접 리다이렉트)
+ */
+export async function getGoogleOAuthUrl(redirectTo: string) {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo, skipBrowserRedirect: true },
+  });
+  if (error) throw new Error(error.message);
+  return data.url;
+}
 
 /**
  * 이메일/비밀번호로 회원가입
@@ -117,10 +136,10 @@ export async function getUserProfile(userId: string) {
     .from('users')
     .select('*')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data;
+  return data; // null if no row exists
 }
 
 /**
@@ -144,23 +163,43 @@ export async function createUserProfile(userId: string, profile: any) {
  * 사용자 프로필 업데이트
  */
 export async function updateUserProfile(userId: string, profile: any) {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from('users')
     .update(profile)
-    .eq('id', userId)
-    .select()
-    .single();
+    .eq('id', userId);
 
   if (error) throw new Error(error.message);
-  return data;
+}
+
+/**
+ * 상담사 프로필 사진 업로드 → Supabase Storage avatars 버킷
+ * 반환: 공개 URL 문자열
+ */
+export async function uploadAvatarPhoto(userId: string, uri: string): Promise<string> {
+  const ext = uri.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+  const path = `counselors/${userId}.${ext}`;
+
+  // React Native에서는 fetch → blob 으로 변환 후 업로드
+  const response = await fetch(uri);
+  const blob = await response.blob();
+
+  const { error } = await supabase.storage
+    .from('avatars')
+    .upload(path, blob, { contentType: mime, upsert: true });
+
+  if (error) throw new Error(error.message);
+
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  return data.publicUrl;
 }
 
 // ============================================
-// 경청사 관련 함수
+// 상담사 관련 함수
 // ============================================
 
 /**
- * 모든 경청사 조회 (가용한 경청사만)
+ * 모든 상담사 조회 (가용한 상담사만)
  */
 export async function getCounselors(limit: number = 10, page: number = 0) {
   const from = page * limit;
@@ -178,21 +217,21 @@ export async function getCounselors(limit: number = 10, page: number = 0) {
 }
 
 /**
- * 경청사 상세 조회
+ * 상담사 상세 조회
  */
 export async function getCounselorDetail(counselorId: string) {
   const { data, error } = await supabase
     .from('counselors')
     .select('*')
     .eq('id', counselorId)
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return data;
+  return data; // null if no row yet
 }
 
 /**
- * 경청사 프로필 생성
+ * 상담사 프로필 생성
  */
 export async function createCounselorProfile(counselorId: string, profile: any) {
   const { data, error } = await supabase
@@ -209,21 +248,48 @@ export async function createCounselorProfile(counselorId: string, profile: any) 
 }
 
 /**
- * 경청사 프로필 업데이트
+ * 상담사 프로필 업데이트 (row 없으면 기본값으로 생성, 있으면 전달된 필드만 업데이트)
  */
 export async function updateCounselorProfile(counselorId: string, profile: any) {
-  const { data, error } = await supabase
-    .from('counselors')
-    .update({
-      ...profile,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', counselorId)
-    .select()
-    .single();
+  const now = new Date().toISOString();
 
-  if (error) throw new Error(error.message);
-  return data;
+  // 1. 존재 여부 먼저 확인 (SELECT만 — RLS 영향 최소화)
+  const { data: existing, error: selectErr } = await supabase
+    .from('counselors')
+    .select('id')
+    .eq('id', counselorId)
+    .maybeSingle();
+
+  if (selectErr) throw new Error(selectErr.message);
+
+  if (existing) {
+    // 2a. row 있음 → 전달된 필드만 UPDATE (기존 값 보존)
+    const { error } = await supabase
+      .from('counselors')
+      .update({ ...profile, updated_at: now })
+      .eq('id', counselorId);
+    if (error) throw new Error(error.message);
+  } else {
+    // 2b. row 없음 → 기본값 + profile로 INSERT
+    const { error } = await supabase
+      .from('counselors')
+      .insert({
+        id:              counselorId,
+        specialty:       [],
+        rating:          0,
+        review_count:    0,
+        is_available:    false,
+        is_certified:    false,
+        hourly_rate:     19000,
+        available_hours: {},
+        bank_name:       null,
+        account_number:  null,
+        created_at:      now,
+        ...profile,
+        updated_at:      now,
+      });
+    if (error) throw new Error(error.message);
+  }
 }
 
 // ============================================
@@ -263,7 +329,7 @@ export async function getUserBookings(userId: string) {
 }
 
 /**
- * 경청사의 예약 목록 조회
+ * 상담사의 예약 목록 조회
  */
 export async function getCounselorBookings(counselorId: string) {
   const { data, error } = await supabase
@@ -332,7 +398,7 @@ export async function createReview(review: any) {
 }
 
 /**
- * 경청사의 리뷰 조회
+ * 상담사의 리뷰 조회
  */
 export async function getCounselorReviews(counselorId: string) {
   const { data, error } = await supabase
@@ -395,7 +461,7 @@ export async function getCourse(courseId: string) {
 }
 
 /**
- * 경청사의 강의 진도 조회
+ * 상담사의 강의 진도 조회
  */
 export async function getCounselorCourseProgress(counselorId: string) {
   const { data, error } = await supabase
@@ -486,7 +552,7 @@ export function getPublicFileUrl(bucket: string, path: string) {
 // ============================================
 
 /**
- * 경청사 예약에 대한 실시간 구독
+ * 상담사 예약에 대한 실시간 구독
  */
 export function subscribeToCounselorBookings(
   counselorId: string,
@@ -514,6 +580,165 @@ export function subscribeToBooking(bookingId: string, callback: (payload: any) =
     .subscribe();
 
   return subscription;
+}
+
+// ============================================
+// 어드민 전용 함수 (role = 'admin' 인 사용자만 호출)
+// ============================================
+
+export async function adminGetStats() {
+  const [users, counselors, bookings, settlements] = await Promise.all([
+    supabase.from('users').select('id', { count: 'exact', head: true }),
+    supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', 'counselor'),
+    supabase.from('bookings').select('status, amount'),
+    supabase.from('settlements').select('status, net_amount'),
+  ]);
+
+  const bookingRows = bookings.data ?? [];
+  const settlementRows = settlements.data ?? [];
+
+  return {
+    totalUsers: users.count ?? 0,
+    totalCounselors: counselors.count ?? 0,
+    totalBookings: bookingRows.length,
+    pendingBookings: bookingRows.filter((b: any) => b.status === 'pending').length,
+    completedBookings: bookingRows.filter((b: any) => b.status === 'completed').length,
+    totalRevenue: bookingRows
+      .filter((b: any) => b.status === 'completed')
+      .reduce((sum: number, b: any) => sum + (b.amount ?? 0), 0),
+    pendingSettlements: settlementRows.filter((s: any) => s.status === 'pending').length,
+  };
+}
+
+export async function adminGetAllCounselors() {
+  const { data, error } = await supabase
+    .from('counselors')
+    .select('*, users(name, avatar_emoji, avatar_url)')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function adminToggleCounselorCertification(counselorId: string, value: boolean) {
+  const { error } = await supabase
+    .from('counselors')
+    .update({ is_certified: value, updated_at: new Date().toISOString() })
+    .eq('id', counselorId);
+  if (error) throw new Error(error.message);
+}
+
+export async function adminToggleCounselorAvailability(counselorId: string, value: boolean) {
+  const { error } = await supabase
+    .from('counselors')
+    .update({ is_available: value, updated_at: new Date().toISOString() })
+    .eq('id', counselorId);
+  if (error) throw new Error(error.message);
+}
+
+export async function adminCreateCourse(course: {
+  title: string;
+  description?: string;
+  video_url?: string;
+  duration_minutes: number;
+  is_required: boolean;
+  order_index: number;
+}) {
+  const { data, error } = await supabase
+    .from('courses')
+    .insert({ ...course, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function adminUpdateCourse(courseId: string, updates: Partial<{
+  title: string;
+  description: string;
+  video_url: string;
+  duration_minutes: number;
+  is_required: boolean;
+  order_index: number;
+}>) {
+  const { error } = await supabase
+    .from('courses')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', courseId);
+  if (error) throw new Error(error.message);
+}
+
+export async function adminDeleteCourse(courseId: string) {
+  const { error } = await supabase.from('courses').delete().eq('id', courseId);
+  if (error) throw new Error(error.message);
+}
+
+export async function adminGetNotices() {
+  const { data, error } = await supabase
+    .from('notices')
+    .select('*')
+    .order('is_pinned', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function adminCreateNotice(notice: {
+  title: string;
+  content: string;
+  is_pinned?: boolean;
+  target_role?: string;
+}) {
+  const { data, error } = await supabase
+    .from('notices')
+    .insert({ ...notice, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function adminUpdateNotice(noticeId: string, updates: Partial<{
+  title: string;
+  content: string;
+  is_pinned: boolean;
+  target_role: string;
+}>) {
+  const { error } = await supabase
+    .from('notices')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', noticeId);
+  if (error) throw new Error(error.message);
+}
+
+export async function adminDeleteNotice(noticeId: string) {
+  const { error } = await supabase.from('notices').delete().eq('id', noticeId);
+  if (error) throw new Error(error.message);
+}
+
+export async function adminGetSettlements() {
+  const { data, error } = await supabase
+    .from('settlements')
+    .select('*, counselors(id, users(name))')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function adminUpdateSettlementStatus(settlementId: string, status: 'pending' | 'paid') {
+  const { error } = await supabase
+    .from('settlements')
+    .update({ status, settled_at: status === 'paid' ? new Date().toISOString() : null })
+    .eq('id', settlementId);
+  if (error) throw new Error(error.message);
+}
+
+export async function adminGetAllUsers() {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }
 
 export default supabase;

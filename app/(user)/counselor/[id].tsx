@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -18,6 +19,7 @@ interface CounselorDetail {
   id: string;
   name: string;
   avatar_emoji: string | null;
+  avatar_url: string | null;
   specialty: Specialty[];
   bio: string | null;
   rating: number;
@@ -64,7 +66,7 @@ export default function CounselorDetailScreen() {
     try {
       const { data, error } = await supabase
         .from('counselors')
-        .select('*, users(name, avatar_emoji)')
+        .select('*, users(name, avatar_emoji, avatar_url)')
         .eq('id', id)
         .single();
 
@@ -72,8 +74,9 @@ export default function CounselorDetailScreen() {
 
       setCounselor({
         id: data.id,
-        name: (data.users as any)?.name ?? '경청사',
+        name: (data.users as any)?.name ?? '상담사',
         avatar_emoji: (data.users as any)?.avatar_emoji ?? null,
+        avatar_url: (data.users as any)?.avatar_url ?? null,
         specialty: data.specialty as Specialty[],
         bio: data.bio,
         rating: Number(data.rating),
@@ -84,7 +87,7 @@ export default function CounselorDetailScreen() {
         available_hours: (data.available_hours as Record<string, string[]>) ?? {},
       });
     } catch (err) {
-      console.error('경청사 조회 실패:', err);
+      console.error('상담사 조회 실패:', err);
     } finally {
       setLoading(false);
     }
@@ -101,7 +104,7 @@ export default function CounselorDetailScreen() {
   if (!counselor) {
     return (
       <View style={[s.centered, { backgroundColor: C.cream }]}>
-        <Text style={{ color: C.brownPale, fontSize: 15 }}>경청사를 찾을 수 없어요</Text>
+        <Text style={{ color: C.brownPale, fontSize: 15 }}>상담사를 찾을 수 없어요</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
           <Text style={{ color: C.brown, fontWeight: '700' }}>← 돌아가기</Text>
         </TouchableOpacity>
@@ -120,7 +123,11 @@ export default function CounselorDetailScreen() {
         {/* ── Profile Header ── */}
         <View style={s.profileHeader}>
           <View style={s.avatarWrap}>
-            <Text style={{ fontSize: 52 }}>{counselor.avatar_emoji ?? '🎧'}</Text>
+            {counselor.avatar_url ? (
+              <Image source={{ uri: counselor.avatar_url }} style={{ width: 92, height: 92, borderRadius: 46 }} />
+            ) : (
+              <Text style={{ fontSize: 52 }}>{counselor.avatar_emoji ?? '🎧'}</Text>
+            )}
             {counselor.is_available && <View style={s.onlineDot} />}
           </View>
 
@@ -197,7 +204,7 @@ export default function CounselorDetailScreen() {
         <View style={s.section}>
           <Text style={s.sectionLabel}>상담 요금</Text>
           <Text style={s.rateText}>{counselor.hourly_rate.toLocaleString()}원</Text>
-          <Text style={s.rateSub}>50분 1회 기준</Text>
+          <Text style={s.rateSub}>30분 1회 기준</Text>
         </View>
 
       </ScrollView>
@@ -205,7 +212,7 @@ export default function CounselorDetailScreen() {
       {/* ── CTA ── */}
       <View style={s.ctaBar}>
         <View style={s.ctaPrice}>
-          <Text style={s.ctaPriceLabel}>50분</Text>
+          <Text style={s.ctaPriceLabel}>30분</Text>
           <Text style={s.ctaPriceValue}>{counselor.hourly_rate.toLocaleString()}원</Text>
         </View>
         <TouchableOpacity

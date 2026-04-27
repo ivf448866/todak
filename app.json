@@ -1,12 +1,9 @@
 {
   "expo": {
-    "name": "토닥",
+    "name": "토닥토닥",
     "slug": "todak",
     "owner": "yoel-ivf",
     "version": "1.0.0",
-    "runtimeVersion": {
-      "policy": "sdkVersion"
-    },
     "orientation": "portrait",
     "userInterfaceStyle": "light",
 
@@ -85,7 +82,7 @@
           "color": "#3d2c1e",
           "defaultChannel": "todak",
           "androidMode": "default",
-          "androidCollapsedTitle": "토닥 알림"
+          "androidCollapsedTitle": "토닥토닥 알림"
         }
       ],
       [

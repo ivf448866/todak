@@ -3,7 +3,7 @@
 // ============================================
 
 // ========== 사용자 역할 ==========
-export type UserRole = 'user' | 'counselor';
+export type UserRole = 'user' | 'counselor' | 'admin';
 export type BookingStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
 export type Specialty = '직장' | '연애' | '가족' | '진로';
 
@@ -13,10 +13,11 @@ export interface User {
   role: UserRole;
   name: string;
   avatar_emoji?: string | null;
+  avatar_url?: string | null;
   created_at: string;
 }
 
-// ========== 경청사 정보 ==========
+// ========== 상담사 정보 ==========
 export interface Counselor extends User {
   role: 'counselor';
   specialty: Specialty[];
@@ -85,7 +86,7 @@ export interface Course {
   updated_at: string;
 }
 
-// ========== 경청사 강의 진도 ==========
+// ========== 상담사 강의 진도 ==========
 export interface CounselorCourse {
   counselor_id: string;
   course_id: string;
@@ -95,16 +96,17 @@ export interface CounselorCourse {
   updated_at: string;
 }
 
-// ========== 경청사 강의 진도 상세 ==========
+// ========== 상담사 강의 진도 상세 ==========
 export interface CounselorCourseWithDetails extends CounselorCourse {
   course?: Course;
 }
 
-// ========== 홈 화면 경청사 목록 (users 조인) ==========
+// ========== 홈 화면 상담사 목록 (users 조인) ==========
 export interface CounselorListItem {
   id: string;
   name: string;
   avatar_emoji: string | null;
+  avatar_url?: string | null;
   specialty: Specialty[];
   bio: string | null;
   rating: number;
@@ -146,6 +148,30 @@ export interface PaginatedResponse<T> {
   page: number;
   limit: number;
   total_pages: number;
+}
+
+// ========== 공지사항 ==========
+export type NoticeTarget = 'all' | 'user' | 'counselor';
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  is_pinned: boolean;
+  target_role: NoticeTarget;
+  created_at: string;
+  updated_at: string;
+}
+
+// ========== 어드민 통계 ==========
+export interface AdminStats {
+  totalUsers: number;
+  totalCounselors: number;
+  totalBookings: number;
+  pendingBookings: number;
+  completedBookings: number;
+  totalRevenue: number;
+  pendingSettlements: number;
 }
 
 // ========== 인증 세션 ==========

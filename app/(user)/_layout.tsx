@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { Redirect } from 'expo-router';
+import { View, ActivityIndicator } from 'react-native';
+import { Stack, Redirect } from 'expo-router';
 import { useAuthStore } from '@/stores/authStore';
 import { registerPushToken, setupNotificationResponseHandler } from '@/lib/notifications';
 
@@ -17,7 +17,13 @@ export default function UserLayout() {
     return setupNotificationResponseHandler();
   }, [user?.id]);
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#faf8f5', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color="#3d2c1e" />
+      </View>
+    );
+  }
   if (!user) return <Redirect href="/login" />;
 
   return (
@@ -30,10 +36,12 @@ export default function UserLayout() {
       }}
     >
       <Stack.Screen name="home"           options={{ headerShown: false }} />
-      <Stack.Screen name="counselor/[id]" options={{ title: '경청사 상세',  headerBackTitle: '돌아가기' }} />
+      <Stack.Screen name="counselor/[id]" options={{ title: '상담사 상세',  headerBackTitle: '돌아가기' }} />
       <Stack.Screen name="booking"        options={{ title: '예약',         headerBackTitle: '돌아가기' }} />
       <Stack.Screen name="session"        options={{ title: '상담 세션',    headerBackTitle: '돌아가기' }} />
       <Stack.Screen name="mypage"         options={{ title: '마이페이지',   headerBackTitle: '돌아가기' }} />
+      <Stack.Screen name="bookings"       options={{ headerShown: false }} />
+      <Stack.Screen name="chat"           options={{ headerShown: false }} />
     </Stack>
   );
 }

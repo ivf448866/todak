@@ -10,25 +10,42 @@
  *   3. 레이아웃 루트에서 setupNotificationResponseHandler() 호출
  *   4. 예약 확정 후 scheduleCounselingReminder(booking) 호출
  */
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { supabase } from './supabase';
 
+// Expo Go(SDK 53+)에서는 원격 푸시가 제거됨 → 모듈 로드 자체를 건너뜀
+const isExpoGo = Constants.appOwnership === 'expo';
+const canUseNotifications = Platform.OS !== 'web' && !isExpoGo;
+
+let Notifications: any = null;
+let Device: any = null;
+if (canUseNotifications) {
+  try {
+    Notifications = require('expo-notifications');
+    Device        = require('expo-device');
+  } catch {
+    // 개발 빌드가 아닌 환경에서 모듈 없으면 무시
+  }
+}
+
 // ─── 포그라운드 알림 표시 설정 ─────────────────────────────────────────────────
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge:  false,
-  }),
-});
+if (Notifications) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge:  false,
+    }),
+  });
+}
 
 // ─── 권한 요청 & 토큰 등록 ────────────────────────────────────────────────────
 
 export async function registerPushToken(userId: string): Promise<void> {
+  if (Platform.OS === 'web') return; // 웹에서는 VAPID 키 없이 푸시 불가
   if (!Device.isDevice) return; // 시뮬레이터에서는 푸시 불가
 
   // Android 알림 채널
@@ -77,7 +94,9 @@ export async function clearPushToken(userId: string): Promise<void> {
  * 앱 루트 레이아웃(_layout.tsx)에서 useEffect로 호출하고 cleanup을 반환한다.
  */
 export function setupNotificationResponseHandler(): () => void {
-  const sub = Notifications.addNotificationResponseReceivedListener(response => {
+  if (!Notifications) return () => {};
+
+  const sub = Notifications.addNotificationResponseReceivedListener((response: any) => {
     const data = response.notification.request.content.data as Record<string, unknown> | undefined;
     const type = data?.type as string | undefined;
 
@@ -90,7 +109,6 @@ export function setupNotificationResponseHandler(): () => void {
       case 'booking_1hr':
       case 'booking_start':
       case 'booking_review':
-        // TODO: booking.id로 상세/세션 화면 이동 (예약 상세 화면 구현 후 연결)
         break;
       case 'settlement':
         router.push('/(counselor)/stats');
@@ -117,10 +135,11 @@ export async function scheduleCounselingReminder(booking: {
   scheduled_at: string;
   counselor_name: string;
 }): Promise<string | null> {
+  if (!Notifications) return null;
+
   const trigger = new Date(booking.scheduled_at);
   trigger.setMinutes(trigger.getMinutes() - 60);
-
-  if (trigger <= new Date()) return null; // 이미 지난 시간
+  if (trigger <= new Date()) return null;
 
   return Notifications.scheduleNotificationAsync({
     content: {
@@ -135,6 +154,8 @@ export async function scheduleCounselingReminder(booking: {
 
 /** 예약 취소 시 관련 로컬 알림 제거 */
 export async function cancelScheduledReminder(bookingId: string): Promise<void> {
+  if (!Notifications) return;
+
   const all = await Notifications.getAllScheduledNotificationsAsync();
   for (const n of all) {
     if ((n.content.data as Record<string, unknown>)?.bookingId === bookingId) {

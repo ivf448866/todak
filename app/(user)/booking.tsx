@@ -29,6 +29,12 @@ import { Specialty } from '@/types';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Step = 'date' | 'time' | 'confirm' | 'payment' | 'complete';
+type SlotStatus = 'available' | 'booked' | 'mine';
+
+interface SlotInfo {
+  time: string;
+  status: SlotStatus;
+}
 
 interface CounselorInfo {
   id: string;
@@ -38,6 +44,12 @@ interface CounselorInfo {
   hourly_rate: number;
   available_hours: Record<string, string[]>;
 }
+
+const TIME_GROUPS = [
+  { label: '🌅 오전', from: 0,  to: 12 },
+  { label: '☀️ 오후', from: 12, to: 18 },
+  { label: '🌙 저녁', from: 18, to: 24 },
+];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,11 +66,13 @@ const C = {
 
 // JS getDay() → daily.co / available_hours key
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const DURATION_MIN = 50;
+const DURATION_MIN = 30;
 
 // Intercepted by WebView's onShouldStartLoadWithRequest
 const SUCCESS_URL = 'https://todak.app/payment/success';
 const FAIL_URL = 'https://todak.app/payment/fail';
+
+const MOCK_PAYMENT = __DEV__;
 
 const STEP_LABELS: Record<Step, string> = {
   date: '날짜 선택',
@@ -85,7 +99,8 @@ export default function BookingScreen() {
 
   // ── Booking data ──────────────────────────────────────────────────────────
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]); // kept for compat
+  const [slotData, setSlotData] = useState<SlotInfo[]>([]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [roomUrl, setRoomUrl] = useState<string | null>(null);
@@ -107,14 +122,14 @@ export default function BookingScreen() {
 
         setCounselor({
           id: data.id,
-          name: (data.users as any)?.name ?? '경청사',
+          name: (data.users as any)?.name ?? '상담사',
           avatar_emoji: (data.users as any)?.avatar_emoji ?? null,
           specialty: data.specialty as Specialty[],
           hourly_rate: data.hourly_rate,
           available_hours: (data.available_hours as Record<string, string[]>) ?? {},
         });
       } catch (err) {
-        console.error('경청사 조회 실패:', err);
+        console.error('상담사 조회 실패:', err);
       } finally {
         setLoadingCounselor(false);
       }
@@ -128,33 +143,54 @@ export default function BookingScreen() {
   }, [selectedDate, counselor]);
 
   const fetchAvailableSlots = async (date: string) => {
-    if (!counselor) return;
+    if (!counselor || !user) return;
     setLoadingSlots(true);
     try {
       const dayKey = DAY_KEYS[getDay(parseISO(date))];
-      const allSlots: string[] = counselor.available_hours[dayKey] ?? [];
+      const override  = counselor.available_hours[date];
+      const allSlots: string[] = override !== undefined
+        ? override
+        : (counselor.available_hours[dayKey] ?? []);
 
-      // Remove already-booked times
-      // 로컬 자정 기준으로 당일 범위 쿼리 (UTC midnight 기준으로 하면 시간대 오차 발생)
-      const dayStart = new Date(`${date}T00:00:00`);   // 로컬 자정
-      const dayEnd   = new Date(`${date}T23:59:59.999`); // 로컬 자정 직전
+      const dayStart = new Date(`${date}T00:00:00`);
+      const dayEnd   = new Date(`${date}T23:59:59.999`);
+
       const { data: existing } = await supabase
         .from('bookings')
-        .select('scheduled_at')
+        .select('scheduled_at, user_id, duration_minutes')
         .eq('counselor_id', counselor.id)
         .gte('scheduled_at', dayStart.toISOString())
         .lte('scheduled_at', dayEnd.toISOString())
         .in('status', ['pending', 'confirmed', 'in_progress']);
 
-      const booked = new Set(
-        (existing ?? []).map((b) => {
-          const d = new Date(b.scheduled_at);
-          // getHours()/getMinutes()로 로컬 시간 비교 (슬롯 문자열이 로컬 기준)
-          return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        })
-      );
+      // 예약된 시간 범위 목록 (시작 ~ 끝)
+      const bookedRanges = (existing ?? []).map(b => {
+        const start = new Date(b.scheduled_at);
+        const end   = new Date(start.getTime() + (b.duration_minutes ?? DURATION_MIN) * 60000);
+        return { start, end, userId: b.user_id };
+      });
 
-      setAvailableSlots(allSlots.filter((t) => !booked.has(t)));
+      // 슬롯 시작 시각이 어느 예약 범위와도 겹치면 충돌
+      function overlaps(slotTime: string): { booked: boolean; mine: boolean } {
+        const [h, m] = slotTime.split(':').map(Number);
+        const slotStart = new Date(date);
+        slotStart.setHours(h, m, 0, 0);
+        const slotEnd = new Date(slotStart.getTime() + DURATION_MIN * 60000);
+
+        for (const r of bookedRanges) {
+          const clash = slotStart < r.end && slotEnd > r.start;
+          if (clash) return { booked: true, mine: r.userId === user.id };
+        }
+        return { booked: false, mine: false };
+      }
+
+      const data: SlotInfo[] = allSlots.map(t => {
+        const { booked, mine } = overlaps(t);
+        return { time: t, status: mine ? 'mine' : booked ? 'booked' : 'available' };
+      });
+
+      setSlotData(data);
+      setAvailableSlots(data.filter(s => s.status === 'available').map(s => s.time));
     } catch (err) {
       console.error('슬롯 조회 실패:', err);
     } finally {
@@ -172,8 +208,13 @@ export default function BookingScreen() {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       const dateStr = format(d, 'yyyy-MM-dd');
-      const dayKey = DAY_KEYS[d.getDay()];
-      const hasSlots = (counselor.available_hours[dayKey] ?? []).length > 0;
+      const dayKey  = DAY_KEYS[d.getDay()];
+
+      // 날짜별 오버라이드 우선 적용
+      const override  = counselor.available_hours[dateStr];
+      const weeklySlots = counselor.available_hours[dayKey] ?? [];
+      const effective = override !== undefined ? override : weeklySlots;
+      const hasSlots  = effective.length > 0;
 
       if (!hasSlots) {
         marks[dateStr] = { disabled: true, disableTouchEvent: true };
@@ -228,11 +269,17 @@ export default function BookingScreen() {
       const newBookingId = await createPendingBooking();
       setBookingId(newBookingId);
 
+      if (MOCK_PAYMENT) {
+        // 테스트 환경: 가결제로 바로 처리
+        await handlePaymentSuccess('mock_payment_key', newBookingId, String(counselor.hourly_rate));
+        return;
+      }
+
       paymentHTML.current = buildPaymentHTML({
         clientKey: process.env.EXPO_PUBLIC_TOSS_CLIENT_KEY ?? '',
         amount: counselor.hourly_rate,
         orderId: newBookingId,
-        orderName: `${counselor.name} 경청 상담`,
+        orderName: `${counselor.name} 상담`,
         customerName: user.name,
         successUrl: SUCCESS_URL,
         failUrl: FAIL_URL,
@@ -251,6 +298,16 @@ export default function BookingScreen() {
     setStep('complete');
 
     try {
+      if (MOCK_PAYMENT) {
+        // 테스트 환경: edge function 없이 DB만 직접 업데이트
+        const { error } = await supabase
+          .from('bookings')
+          .update({ status: 'confirmed' })
+          .eq('id', orderId);
+        if (error) throw error;
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke('post-payment', {
         body: {
           paymentKey,
@@ -265,7 +322,6 @@ export default function BookingScreen() {
       if (data?.roomUrl) {
         setRoomUrl(data.roomUrl);
       } else {
-        // 결제는 성공했으나 상담방 생성 실패 — 고객센터 안내
         Alert.alert(
           '상담방 준비 중',
           '결제가 완료됐어요.\n상담방 생성이 지연되고 있어요. 잠시 후 예약 내역에서 다시 입장해주세요.',
@@ -395,7 +451,7 @@ export default function BookingScreen() {
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           <View style={s.stepHeader}>
             <Text style={s.stepTitle}>언제 상담받고 싶으세요?</Text>
-            <Text style={s.stepSub}>{counselor.name} 경청사와 함께해요</Text>
+            <Text style={s.stepSub}>{counselor.name} 상담사와 함께해요</Text>
           </View>
 
           <Calendar
@@ -405,6 +461,7 @@ export default function BookingScreen() {
             onDayPress={(day) => {
               setSelectedDate(day.dateString);
               setSelectedTime(null);
+              setSlotData([]);
             }}
             theme={{
               backgroundColor: C.cream,
@@ -443,36 +500,86 @@ export default function BookingScreen() {
             <Text style={s.stepSub}>{selectedDate} · {DURATION_MIN}분 상담</Text>
           </View>
 
+          {/* 범례 */}
+          <View style={s.slotLegend}>
+            <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: C.cream, borderColor: '#e8e0d4' }]} /><Text style={s.legendLabel}>예약 가능</Text></View>
+            <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb' }]} /><Text style={s.legendLabel}>예약됨</Text></View>
+            <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: '#fef3c7', borderColor: C.gold }]} /><Text style={s.legendLabel}>내 예약</Text></View>
+          </View>
+
           {loadingSlots ? (
-            <View style={s.centered}>
-              <ActivityIndicator size="large" color={C.brown} />
-            </View>
-          ) : availableSlots.length === 0 ? (
+            <View style={s.centered}><ActivityIndicator size="large" color={C.brown} /></View>
+          ) : slotData.length === 0 ? (
             <View style={s.emptyState}>
               <Text style={{ fontSize: 28, marginBottom: 12 }}>😔</Text>
               <Text style={s.emptyTitle}>이 날은 예약 가능한 시간이 없어요</Text>
-              <TouchableOpacity
-                onPress={() => { setStep('date'); setSelectedDate(null); }}
-                style={{ marginTop: 16 }}
-              >
+              <TouchableOpacity onPress={() => { setStep('date'); setSelectedDate(null); }} style={{ marginTop: 16 }}>
                 <Text style={s.linkText}>← 날짜 다시 선택</Text>
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={s.slotsGrid}>
-              {availableSlots.map((time) => (
-                <TouchableOpacity
-                  key={time}
-                  style={[s.slotBtn, selectedTime === time && s.slotBtnActive]}
-                  onPress={() => setSelectedTime(time)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[s.slotText, selectedTime === time && s.slotTextActive]}>
-                    {time}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <>
+              {TIME_GROUPS.map(group => {
+                const groupSlots = slotData.filter(s => {
+                  const h = parseInt(s.time.split(':')[0], 10);
+                  return h >= group.from && h < group.to;
+                });
+                if (groupSlots.length === 0) return null;
+                const availCount = groupSlots.filter(s => s.status === 'available').length;
+                return (
+                  <View key={group.label} style={s.timeGroup}>
+                    <View style={s.timeGroupHeader}>
+                      <Text style={s.timeGroupLabel}>{group.label}</Text>
+                      <Text style={s.timeGroupCount}>
+                        {availCount > 0 ? `${availCount}개 가능` : '모두 예약됨'}
+                      </Text>
+                    </View>
+                    <View style={s.slotsGrid}>
+                      {groupSlots.map(({ time, status }) => {
+                        const isSelected = selectedTime === time;
+                        const isAvail    = status === 'available';
+                        const isMine     = status === 'mine';
+                        const isBooked   = status === 'booked';
+                        return (
+                          <TouchableOpacity
+                            key={time}
+                            style={[
+                              s.slotBtn,
+                              isSelected && s.slotBtnActive,
+                              isBooked   && s.slotBtnBooked,
+                              isMine     && s.slotBtnMine,
+                            ]}
+                            onPress={() => isAvail && setSelectedTime(time)}
+                            activeOpacity={isAvail ? 0.75 : 1}
+                            disabled={!isAvail}
+                          >
+                            <Text style={[
+                              s.slotText,
+                              isSelected && s.slotTextActive,
+                              isBooked   && s.slotTextBooked,
+                              isMine     && s.slotTextMine,
+                            ]}>
+                              {time}
+                            </Text>
+                            {isBooked && <Text style={s.slotSubText}>예약됨</Text>}
+                            {isMine   && <Text style={[s.slotSubText, { color: '#92400e' }]}>내 예약</Text>}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
+              {availableSlots.length === 0 && (
+                <View style={s.emptyState}>
+                  <Text style={{ fontSize: 28, marginBottom: 12 }}>😔</Text>
+                  <Text style={s.emptyTitle}>예약 가능한 시간이 없어요</Text>
+                  <TouchableOpacity onPress={() => { setStep('date'); setSelectedDate(null); }} style={{ marginTop: 16 }}>
+                    <Text style={s.linkText}>← 날짜 다시 선택</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       )}
@@ -581,7 +688,7 @@ export default function BookingScreen() {
 
           <Text style={s.completeTitle}>예약 완료!</Text>
           <Text style={s.completeSub}>
-            {counselor.name} 경청사와의{'\n'}상담이 예약되었어요 🎧
+            {counselor.name} 상담사와의{'\n'}상담이 예약되었어요 🎧
           </Text>
 
           <View style={s.completeSummaryCard}>
@@ -650,6 +757,11 @@ export default function BookingScreen() {
 
           {step === 'confirm' && (
             <>
+              {MOCK_PAYMENT && (
+                <View style={s.mockBanner}>
+                  <Text style={s.mockBannerText}>🧪 테스트 환경 — 가결제로 처리됩니다</Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={[s.primaryBtn, loadingPayment && s.btnDisabled]}
                 disabled={loadingPayment}
@@ -659,7 +771,9 @@ export default function BookingScreen() {
                   <ActivityIndicator size="small" color={C.white} />
                 ) : (
                   <Text style={s.primaryBtnText}>
-                    {counselor.hourly_rate.toLocaleString()}원 결제하기
+                    {MOCK_PAYMENT
+                      ? `${counselor.hourly_rate.toLocaleString()}원 가결제 (테스트)`
+                      : `${counselor.hourly_rate.toLocaleString()}원 결제하기`}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -773,8 +887,35 @@ const s = StyleSheet.create({
     elevation: 2,
   },
   slotBtnActive: { backgroundColor: '#3d2c1e', borderColor: '#3d2c1e' },
-  slotText: { fontSize: 14, fontWeight: '600', color: '#5a4633' },
+  slotBtnBooked: {
+    backgroundColor: '#f3f4f6', borderColor: '#e5e7eb',
+    shadowOpacity: 0,
+  },
+  slotBtnMine: {
+    backgroundColor: '#fef3c7', borderColor: '#f0c98a',
+    shadowOpacity: 0,
+  },
+  slotText: { fontSize: 13, fontWeight: '700', color: '#5a4633' },
   slotTextActive: { color: '#ffffff' },
+  slotTextBooked: { color: '#9ca3af', fontWeight: '500' },
+  slotTextMine:   { color: '#92400e', fontWeight: '700' },
+  slotSubText:    { fontSize: 9, color: '#9ca3af', marginTop: 2, fontWeight: '600' },
+
+  slotLegend: {
+    flexDirection: 'row', gap: 16,
+    paddingHorizontal: 20, paddingBottom: 12,
+  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  legendDot:  { width: 10, height: 10, borderRadius: 5, borderWidth: 1 },
+  legendLabel: { fontSize: 11, color: '#8c7b6b', fontWeight: '600' },
+
+  timeGroup: { marginBottom: 4 },
+  timeGroupHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 8,
+  },
+  timeGroupLabel: { fontSize: 13, fontWeight: '800', color: '#3d2c1e' },
+  timeGroupCount: { fontSize: 11, color: '#8c7b6b', fontWeight: '600' },
 
   // Confirm card
   confirmCard: {
@@ -911,4 +1052,14 @@ const s = StyleSheet.create({
   },
   secondaryBtnText: { fontSize: 15, fontWeight: '600', color: '#5a4633' },
   linkText: { fontSize: 13, color: '#8c7b6b', fontWeight: '500' },
+
+  mockBanner: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  mockBannerText: { fontSize: 12, color: '#92400e', fontWeight: '700' },
 });

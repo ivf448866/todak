@@ -148,7 +148,7 @@ serve(async (req: Request) => {
         name: roomName,
         properties: {
           exp: expireUnix,        // 상담 종료 30분 후 자동 만료
-          max_participants: 2,    // 이용자 + 경청사
+          max_participants: 2,    // 이용자 + 상담사
           enable_prejoin_ui: false,
           enable_knocking: false,
           privacy: 'private',
@@ -186,7 +186,7 @@ serve(async (req: Request) => {
       console.error('booking 업데이트 실패:', updateError.message);
     }
 
-    // ── 5. 경청사에게 신규 예약 푸시 알림 ─────────────────────────────────
+    // ── 5. 상담사에게 신규 예약 푸시 알림 ─────────────────────────────────
     {
       const { data: booking } = await supabase
         .from('bookings')

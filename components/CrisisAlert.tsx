@@ -2,7 +2,7 @@
  * 위기 대응 알림 오버레이
  *
  * 이용자가 위기 키워드 입력 시 → Supabase Realtime INSERT 이벤트 →
- * 경청사 화면에 즉시 빨간 모달 표시
+ * 상담사 화면에 즉시 빨간 모달 표시
  *
  * crisis_alerts 테이블 INSERT는 채팅 Edge Function(또는 Client)에서 수행.
  * 해당 컴포넌트는 counselor의 모든 화면에 마운트되어 있어야 합니다.

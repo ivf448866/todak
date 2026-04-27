@@ -5,10 +5,10 @@
  *
  * 알림 종류 및 발송 시점:
  *   booking_1hr_user       — 상담 57~63분 전 → 이용자에게 1시간 전 알림
- *   booking_30min_counselor — 상담 27~33분 전 → 경청사에게 30분 전 알림
+ *   booking_30min_counselor — 상담 27~33분 전 → 상담사에게 30분 전 알림
  *   booking_start_user     — 상담 ±3분      → 이용자에게 시작 알림
  *   booking_review_user    — 완료 후 최근 6분 이내 → 이용자에게 리뷰 요청
- *   education_reminder     — 7일 이내 미발송 경청사 대상 교육 독촉 알림
+ *   education_reminder     — 7일 이내 미발송 상담사 대상 교육 독촉 알림
  *
  * 중복 방지: notification_log 테이블 UNIQUE(user_id, booking_id, type)
  *
@@ -154,7 +154,7 @@ serve(async (req: Request) => {
         if (!userRow?.expo_push_token) { stats.skipped++; continue; }
         if (await alreadySent(booking.user_id, booking.id, 'booking_1hr_user')) { stats.skipped++; continue; }
 
-        const counselorName = counselorRow?.name ?? '경청사';
+        const counselorName = counselorRow?.name ?? '상담사';
         messages.push({
           to:    userRow.expo_push_token,
           title: '상담 1시간 전이에요 ☕',
@@ -166,7 +166,7 @@ serve(async (req: Request) => {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 2. 경청사 — 상담 30분 전 알림 (27~33분 전)
+    // 2. 상담사 — 상담 30분 전 알림 (27~33분 전)
     // ═══════════════════════════════════════════════════════════════════════
     {
       const items = await fetchBookingsWithTokens(after(27), after(33), ['confirmed']);
@@ -194,7 +194,7 @@ serve(async (req: Request) => {
         if (!userRow?.expo_push_token) { stats.skipped++; continue; }
         if (await alreadySent(booking.user_id, booking.id, 'booking_start_user')) { stats.skipped++; continue; }
 
-        const counselorName = counselorRow?.name ?? '경청사';
+        const counselorName = counselorRow?.name ?? '상담사';
         messages.push({
           to:    userRow.expo_push_token,
           title: '상담이 시작됐어요 📱',
@@ -235,7 +235,7 @@ serve(async (req: Request) => {
           messages.push({
             to:    token,
             title: '상담이 어떠셨나요? ⭐',
-            body:  '솔직한 후기를 남겨주시면 경청사에게 큰 힘이 돼요',
+            body:  '솔직한 후기를 남겨주시면 상담사에게 큰 힘이 돼요',
             data:  { type: 'booking_review', bookingId: b.id },
           });
           logs.push({ userId: b.user_id, bookingId: b.id, type: 'booking_review_user' });
@@ -244,10 +244,10 @@ serve(async (req: Request) => {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 5. 경청사 — 교육 독촉 알림 (7일 이내 미발송 + 미인증 + 미완료 과정 보유)
+    // 5. 상담사 — 교육 독촉 알림 (7일 이내 미발송 + 미인증 + 미완료 과정 보유)
     // ═══════════════════════════════════════════════════════════════════════
     {
-      // 미인증 경청사 조회 (is_certified = false)
+      // 미인증 상담사 조회 (is_certified = false)
       const { data: uncertified } = await db
         .from('counselors')
         .select('id')
@@ -256,7 +256,7 @@ serve(async (req: Request) => {
       if (uncertified?.length) {
         const counselorIds = (uncertified as { id: string }[]).map(c => c.id);
 
-        // 최근 7일 내 교육 알림 발송 이력이 없는 경청사 필터
+        // 최근 7일 내 교육 알림 발송 이력이 없는 상담사 필터
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60_000);
         const { data: recentLogs } = await db
           .from('notification_log')
@@ -281,7 +281,7 @@ serve(async (req: Request) => {
             messages.push({
               to:    u.expo_push_token,
               title: '필수 교육을 완료해주세요 📚',
-              body:  '인증 경청사가 되려면 필수 과정을 모두 이수해야 해요',
+              body:  '인증 상담사가 되려면 필수 과정을 모두 이수해야 해요',
               data:  { type: 'education_reminder' },
             });
             logs.push({ userId: u.id, bookingId: null, type: 'education_reminder' });

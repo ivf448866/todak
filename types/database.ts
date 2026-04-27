@@ -7,7 +7,7 @@
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type UserRole = 'user' | 'counselor';
+export type UserRole = 'user' | 'counselor' | 'admin';
 export type BookingStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
 export type Specialty = '직장' | '연애' | '가족' | '진로';
 

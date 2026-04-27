@@ -31,13 +31,22 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Audio } from 'expo-av';
-import Daily, {
-  DailyCall,
-  DailyParticipant,
-  DailyMediaView,
-} from '@daily-co/react-native-daily-js';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
+
+// Daily.co is native-only — Metro evaluates require() at bundle time,
+// so use try/catch instead of a ternary to avoid web bundle errors
+let Daily: any = null;
+let DailyMediaView: any = () => null;
+if (Platform.OS !== 'web') {
+  try {
+    const mod = require('@daily-co/react-native-daily-js');
+    Daily = mod.default;
+    DailyMediaView = mod.DailyMediaView;
+  } catch {}
+}
+type DailyCall = any;
+type DailyParticipant = any;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -457,7 +466,7 @@ export default function SessionScreen() {
           {counselorEmoji ?? '🎧'}
         </Text>
         <Text style={{ fontSize: 16, color: C.textSub, fontWeight: '600', marginBottom: 8 }}>
-          {counselorName ?? '경청사'}
+          {counselorName ?? '상담사'}
         </Text>
         <Text style={{ fontSize: 13, color: C.textMuted }}>
           {phase === 'permission' ? '권한 확인 중…' : '연결 중…'}
@@ -476,7 +485,7 @@ export default function SessionScreen() {
           {counselorEmoji ?? '🎧'}
         </Text>
         <Text style={{ fontSize: 17, color: C.white, fontWeight: '700', marginBottom: 8 }}>
-          {counselorName ?? '경청사'}
+          {counselorName ?? '상담사'}
         </Text>
         <Text style={{ fontSize: 13, color: C.textMuted, marginBottom: 40 }}>
           상담사 입장을 기다리고 있어요…
@@ -513,7 +522,7 @@ export default function SessionScreen() {
 
             <Text style={s.reviewTitle}>상담은 어떠셨나요?</Text>
             <Text style={s.reviewSub}>
-              {counselorName ?? '경청사'} 경청사와의{'\n'}소중한 시간이었어요
+              {counselorName ?? '상담사'} 상담사와의{'\n'}소중한 시간이었어요
             </Text>
 
             <View style={s.ratingWrap}>
@@ -572,7 +581,7 @@ export default function SessionScreen() {
           <View style={s.avatarLarge}>
             <Text style={{ fontSize: 72 }}>{counselorEmoji ?? '🎧'}</Text>
           </View>
-          <Text style={s.audioName}>{counselorName ?? '경청사'}</Text>
+          <Text style={s.audioName}>{counselorName ?? '상담사'}</Text>
           <AudioWaveform active={isRemoteAudioActive} />
           {/* DailyMediaView hidden (audio only) */}
           {remoteAudio && (
@@ -598,7 +607,7 @@ export default function SessionScreen() {
             <View style={s.onlineDot} />
             <Text style={s.onlineText}>연결됨</Text>
           </View>
-          <Text style={s.counselorNameText}>{counselorName ?? '경청사'}</Text>
+          <Text style={s.counselorNameText}>{counselorName ?? '상담사'}</Text>
         </View>
 
         {/* Timer */}

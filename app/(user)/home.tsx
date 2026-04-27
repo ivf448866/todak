@@ -9,11 +9,15 @@ import {
   StatusBar,
   StyleSheet,
   Platform,
+  Image,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import { Specialty, CounselorListItem } from '@/types';
+import { AccountSwitcher } from '@/components/AccountSwitcher';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -28,7 +32,7 @@ type CounselorRow = {
   review_count: number;
   is_available: boolean;
   is_certified: boolean;
-  users: { name: string; avatar_emoji: string | null } | null;
+  users: { name: string; avatar_emoji: string | null; avatar_url: string | null } | null;
 };
 
 interface TabItem {
@@ -57,10 +61,10 @@ const C = {
 const CATEGORIES: CategoryFilter[] = ['전체', '직장', '연애', '가족', '진로'];
 
 const TABS: TabItem[] = [
-  { id: 'home', icon: '🏠', label: '홈', route: '/(user)/home' },
-  { id: 'booking', icon: '📅', label: '예약내역', route: '/(user)/booking' },
-  { id: 'chat', icon: '💬', label: '채팅', route: '/(user)/chat' },
-  { id: 'mypage', icon: '👤', label: '마이페이지', route: '/(user)/mypage' },
+  { id: 'home',     icon: '🏠', label: '홈',      route: '/(user)/home' },
+  { id: 'bookings', icon: '📅', label: '예약내역', route: '/(user)/bookings' },
+  { id: 'chat',     icon: '💬', label: '채팅',    route: '/(user)/chat' },
+  { id: 'mypage',   icon: '👤', label: '마이페이지', route: '/(user)/mypage' },
 ];
 
 const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : 66;
@@ -140,7 +144,11 @@ function CounselorCard({
       {/* Avatar + Online dot */}
       <View style={s.avatarWrap}>
         <View style={s.avatarCircle}>
-          <Text style={{ fontSize: 30 }}>{item.avatar_emoji ?? '🎧'}</Text>
+          {item.avatar_url ? (
+            <Image source={{ uri: item.avatar_url }} style={{ width: 56, height: 56, borderRadius: 28 }} />
+          ) : (
+            <Text style={{ fontSize: 30 }}>{item.avatar_emoji ?? '🎧'}</Text>
+          )}
         </View>
         {item.is_available && <View style={s.onlineDot} />}
       </View>
@@ -216,6 +224,9 @@ export default function UserHomeScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('전체');
   const [onlineCount, setOnlineCount] = useState(0);
+  const [showInstantModal, setShowInstantModal] = useState(false);
+  const [instantList, setInstantList] = useState<CounselorListItem[]>([]);
+  const [instantLoading, setInstantLoading] = useState(false);
 
   const fetchCounselors = useCallback(async (category: CategoryFilter) => {
     try {
@@ -224,7 +235,7 @@ export default function UserHomeScreen() {
       let query = supabase
         .from('counselors')
         .select(
-          'id, specialty, bio, rating, review_count, is_available, is_certified, users(name, avatar_emoji)'
+          'id, specialty, bio, rating, review_count, is_available, is_certified, users(name, avatar_emoji, avatar_url)'
         )
         .order('is_available', { ascending: false })
         .order('rating', { ascending: false });
@@ -238,8 +249,9 @@ export default function UserHomeScreen() {
 
       const items: CounselorListItem[] = ((data ?? []) as CounselorRow[]).map((row) => ({
         id: row.id,
-        name: row.users?.name ?? '경청사',
+        name: row.users?.name ?? '상담사',
         avatar_emoji: row.users?.avatar_emoji ?? null,
+        avatar_url: row.users?.avatar_url ?? null,
         specialty: row.specialty as Specialty[],
         bio: row.bio,
         rating: Number(row.rating),
@@ -251,7 +263,7 @@ export default function UserHomeScreen() {
       setCounselors(items);
       setOnlineCount(items.filter((c) => c.is_available).length);
     } catch (err) {
-      console.error('경청사 목록 조회 실패:', err);
+      console.error('상담사 목록 조회 실패:', err);
     } finally {
       setLoading(false);
     }
@@ -261,8 +273,40 @@ export default function UserHomeScreen() {
     fetchCounselors(selectedCategory);
   }, [selectedCategory, fetchCounselors]);
 
-  // 실시간 구독
+  const openInstantModal = useCallback(async () => {
+    setShowInstantModal(true);
+    setInstantLoading(true);
+    try {
+      const { data } = await supabase
+        .from('counselors')
+        .select('id, specialty, bio, rating, review_count, is_available, is_certified, users(name, avatar_emoji, avatar_url)')
+        .eq('is_available', true)
+        .order('rating', { ascending: false });
+
+      const items: CounselorListItem[] = ((data ?? []) as CounselorRow[]).map(row => ({
+        id: row.id,
+        name: row.users?.name ?? '상담사',
+        avatar_emoji: row.users?.avatar_emoji ?? null,
+        avatar_url: row.users?.avatar_url ?? null,
+        specialty: row.specialty as Specialty[],
+        bio: row.bio,
+        rating: Number(row.rating),
+        review_count: row.review_count,
+        is_available: row.is_available,
+        is_certified: row.is_certified,
+      }));
+      setInstantList(items);
+    } catch (e) {
+      console.error('[즉시 상담] 조회 실패:', e);
+    } finally {
+      setInstantLoading(false);
+    }
+  }, []);
+
+  // 실시간 구독 (웹은 WebSocket 미지원 — 폴링 없이 최초 1회만 로드)
   useEffect(() => {
+    if (Platform.OS === 'web') return;
+
     const channel = supabase
       .channel('home-counselors')
       .on(
@@ -284,12 +328,15 @@ export default function UserHomeScreen() {
       {/* ── Header ── */}
       <View style={s.header}>
         <View>
-          <Text style={s.logoText}>토닥</Text>
+          <Text style={s.logoText}>토닥토닥</Text>
           <Text style={s.tagline}>귀 기울여 드려요</Text>
         </View>
-        <TouchableOpacity style={s.bellBtn} activeOpacity={0.7}>
-          <Text style={{ fontSize: 22 }}>🔔</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity style={s.bellBtn} activeOpacity={0.7}>
+            <Text style={{ fontSize: 22 }}>🔔</Text>
+          </TouchableOpacity>
+          <AccountSwitcher />
+        </View>
       </View>
 
       {/* ── Scroll Content ── */}
@@ -307,7 +354,7 @@ export default function UserHomeScreen() {
           {/* 온라인 뱃지 */}
           <View style={s.onlineBadge}>
             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.green, marginRight: 5 }} />
-            <Text style={s.onlineBadgeText}>경청사 {onlineCount}명 온라인</Text>
+            <Text style={s.onlineBadgeText}>상담사 {onlineCount}명 온라인</Text>
           </View>
 
           <Text style={s.heroTitle}>오늘 마음이{'\n'}좀 어떠세요?</Text>
@@ -316,7 +363,7 @@ export default function UserHomeScreen() {
           <TouchableOpacity
             style={s.heroCta}
             activeOpacity={0.85}
-            onPress={() => router.push('/(user)/booking' as any)}
+            onPress={openInstantModal}
           >
             <Text style={s.heroCtaText}>지금 바로 시작하기  →</Text>
           </TouchableOpacity>
@@ -348,7 +395,7 @@ export default function UserHomeScreen() {
         {/* ── Section Header ── */}
         <View style={s.sectionRow}>
           <Text style={s.sectionTitle}>
-            {selectedCategory === '전체' ? '모든 경청사' : `${selectedCategory} 전문`}
+            {selectedCategory === '전체' ? '모든 상담사' : `${selectedCategory} 전문`}
           </Text>
           {!loading && (
             <Text style={s.sectionCount}>{counselors.length}명</Text>
@@ -368,7 +415,7 @@ export default function UserHomeScreen() {
           ) : counselors.length === 0 ? (
             <View style={s.empty}>
               <Text style={{ fontSize: 36, marginBottom: 12 }}>🎧</Text>
-              <Text style={s.emptyTitle}>경청사가 없어요</Text>
+              <Text style={s.emptyTitle}>상담사가 없어요</Text>
               <Text style={s.emptyDesc}>다른 카테고리를 선택해보세요</Text>
             </View>
           ) : (
@@ -387,6 +434,108 @@ export default function UserHomeScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* ── 즉시 상담 모달 ── */}
+      <Modal
+        visible={showInstantModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowInstantModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            {/* 핸들 */}
+            <View style={s.modalHandle} />
+
+            <View style={s.modalHeader}>
+              <View>
+                <Text style={s.modalTitle}>지금 바로 상담하기</Text>
+                <Text style={s.modalSub}>현재 상담 가능한 상담사예요</Text>
+              </View>
+              <TouchableOpacity
+                style={s.modalClose}
+                onPress={() => setShowInstantModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 16, color: C.brownPale }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {instantLoading ? (
+              <View style={s.modalCenter}>
+                <ActivityIndicator size="large" color={C.brown} />
+                <Text style={s.modalCenterText}>상담사 확인 중...</Text>
+              </View>
+            ) : instantList.length === 0 ? (
+              <View style={s.modalCenter}>
+                <Text style={{ fontSize: 40, marginBottom: 12 }}>😔</Text>
+                <Text style={s.modalEmptyTitle}>지금 바로 가능한 상담사가 없어요</Text>
+                <Text style={s.modalEmptySub}>예약을 통해 원하는 시간에{'\n'}상담사를 만나보세요</Text>
+                <TouchableOpacity
+                  style={s.modalEmptyBtn}
+                  onPress={() => setShowInstantModal(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.modalEmptyBtnText}>상담사 둘러보기</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                {instantList.map((item, i) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[s.instantCard, i > 0 && { marginTop: 10 }]}
+                    onPress={() => {
+                      setShowInstantModal(false);
+                      router.push({
+                        pathname: '/(user)/booking',
+                        params: { counselorId: item.id },
+                      } as any);
+                    }}
+                    activeOpacity={0.82}
+                  >
+                    <View style={s.instantAvatarWrap}>
+                      {item.avatar_url ? (
+                        <Image source={{ uri: item.avatar_url }} style={s.instantAvatarImg} />
+                      ) : (
+                        <View style={s.instantAvatarCircle}>
+                          <Text style={{ fontSize: 26 }}>{item.avatar_emoji ?? '🎧'}</Text>
+                        </View>
+                      )}
+                      <View style={s.instantOnlineDot} />
+                    </View>
+
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                        <Text style={s.instantName}>{item.name} 상담사</Text>
+                        {item.is_certified && (
+                          <View style={s.certBadge}>
+                            <Text style={s.certText}>인증</Text>
+                          </View>
+                        )}
+                      </View>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                        {item.specialty.map(sp => (
+                          <View key={sp} style={s.specialtyChip}>
+                            <Text style={s.specialtyText}>{sp}</Text>
+                          </View>
+                        ))}
+                      </View>
+                      {!!item.bio && (
+                        <Text style={s.instantBio} numberOfLines={1}>{item.bio}</Text>
+                      )}
+                      <Text style={s.instantRating}>★ {item.rating.toFixed(1)}  리뷰 {item.review_count}개</Text>
+                    </View>
+
+                    <Text style={s.instantArrow}>→</Text>
+                  </TouchableOpacity>
+                ))}
+                <View style={{ height: 20 }} />
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Bottom Tab Bar ── */}
       <View style={s.tabBar}>
@@ -702,6 +851,72 @@ const s = StyleSheet.create({
     color: C.brownPale,
     fontWeight: '500',
   },
+  // 즉시 상담 모달
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: C.cream,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: '#d6cfc5',
+    alignSelf: 'center', marginTop: 12, marginBottom: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'flex-start', paddingVertical: 12,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '900', color: C.brown },
+  modalSub:   { fontSize: 13, color: C.brownPale, marginTop: 2 },
+  modalClose: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: '#ede9e2',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalCenter: {
+    alignItems: 'center', paddingVertical: 48,
+  },
+  modalCenterText: { marginTop: 12, fontSize: 14, color: C.brownPale },
+  modalEmptyTitle: { fontSize: 16, fontWeight: '800', color: C.brown, marginBottom: 8 },
+  modalEmptySub:   { fontSize: 13, color: C.brownPale, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+  modalEmptyBtn: {
+    backgroundColor: C.brown, borderRadius: 12,
+    paddingHorizontal: 24, paddingVertical: 10,
+  },
+  modalEmptyBtnText: { fontSize: 14, fontWeight: '800', color: C.cream },
+
+  instantCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: C.white, borderRadius: 16, padding: 14,
+    shadowColor: C.brown, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
+  },
+  instantAvatarWrap: { position: 'relative', width: 56, height: 56 },
+  instantAvatarImg: { width: 56, height: 56, borderRadius: 28 },
+  instantAvatarCircle: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: '#f5efe6',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  instantOnlineDot: {
+    position: 'absolute', bottom: 1, right: 1,
+    width: 13, height: 13, borderRadius: 7,
+    backgroundColor: C.green,
+    borderWidth: 2, borderColor: C.white,
+  },
+  instantName:  { fontSize: 15, fontWeight: '800', color: C.brown },
+  instantBio:   { fontSize: 12, color: C.brownPale, marginBottom: 3 },
+  instantRating:{ fontSize: 12, color: C.brownPale, marginTop: 2 },
+  instantArrow: { fontSize: 18, color: C.brownPale },
+
   tabLabelActive: {
     color: C.brown,
     fontWeight: '700',
