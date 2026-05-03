@@ -6,22 +6,18 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-
     "icon": "./assets/icon.png",
     "scheme": "todak",
-
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#faf8f5"
     },
-
     "assetBundlePatterns": [
       "**/*"
     ],
-
     "ios": {
-"bundleIdentifier": "com.todak.app",
+      "bundleIdentifier": "com.todak.app",
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "상담사와 화상 통화를 위해 카메라를 사용합니다.",
@@ -30,29 +26,30 @@
         "UIBackgroundModes": [
           "remote-notification",
           "audio"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       },
       "associatedDomains": [
         "applinks:todak.app"
       ]
     },
-
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#faf8f5"
       },
-      "package": "com.todak.app",
-      "versionCode": 1,
+      "package": "com.app.todak",
+      "versionCode": 2,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-"intentFilters": [
+      "intentFilters": [
         {
           "action": "VIEW",
           "autoVerify": true,
@@ -63,11 +60,13 @@
               "pathPrefix": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
-
     "plugins": [
       [
         "expo-router",
@@ -92,14 +91,15 @@
         }
       ]
     ],
-
     "updates": {
       "enabled": true,
       "url": "https://u.expo.dev/09e5d560-3f8f-49cb-b0ad-afc3393356dc",
       "fallbackToCacheTimeout": 0,
       "checkAutomatically": "ON_LOAD"
     },
-
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "router": {
         "origin": false

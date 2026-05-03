@@ -1,10 +1,7 @@
 /**
- * 예약 화면 — 날짜 → 시간 → 확인 → 결제(WebView) → 완료
- *
- * 필수 패키지 설치:
- *   npx expo install react-native-webview react-native-calendars
+ * 예약 화면 — 날짜 → 시간 → 확인 → 계좌이체 안내 → 완료
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,22 +10,23 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
-  Modal,
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Calendar } from 'react-native-calendars';
-import WebView from 'react-native-webview';
-import { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes';
 import { format, addMonths, parseISO, getDay } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
-import { buildPaymentHTML } from '@/lib/toss';
 import { Specialty } from '@/types';
+
+// ─── 계좌 정보 ────────────────────────────────────────────────────────────────
+const BANK_NAME    = '기업은행';
+const BANK_ACCOUNT = '010-8972-5642';
+const BANK_HOLDER  = '최성찬';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Step = 'date' | 'time' | 'confirm' | 'payment' | 'complete';
+type Step = 'date' | 'time' | 'confirm' | 'complete';
 type SlotStatus = 'available' | 'booked' | 'mine';
 
 interface SlotInfo {
@@ -64,21 +62,13 @@ const C = {
   white: '#ffffff',
 } as const;
 
-// JS getDay() → daily.co / available_hours key
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DURATION_MIN = 30;
-
-// Intercepted by WebView's onShouldStartLoadWithRequest
-const SUCCESS_URL = 'https://todak.app/payment/success';
-const FAIL_URL = 'https://todak.app/payment/fail';
-
-const MOCK_PAYMENT = __DEV__;
 
 const STEP_LABELS: Record<Step, string> = {
   date: '날짜 선택',
   time: '시간 선택',
   confirm: '예약 확인',
-  payment: '결제',
   complete: '완료',
 };
 const WIZARD_STEPS: Step[] = ['date', 'time', 'confirm'];
@@ -103,9 +93,6 @@ export default function BookingScreen() {
   const [slotData, setSlotData] = useState<SlotInfo[]>([]);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [bookingId, setBookingId] = useState<string | null>(null);
-  const [roomUrl, setRoomUrl] = useState<string | null>(null);
-
-  const paymentHTML = useRef('');
 
   // ── Fetch counselor ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -268,130 +255,11 @@ export default function BookingScreen() {
     try {
       const newBookingId = await createPendingBooking();
       setBookingId(newBookingId);
-
-      if (MOCK_PAYMENT) {
-        // 테스트 환경: 가결제로 바로 처리
-        await handlePaymentSuccess('mock_payment_key', newBookingId, String(counselor.hourly_rate));
-        return;
-      }
-
-      paymentHTML.current = buildPaymentHTML({
-        clientKey: process.env.EXPO_PUBLIC_TOSS_CLIENT_KEY ?? '',
-        amount: counselor.hourly_rate,
-        orderId: newBookingId,
-        orderName: `${counselor.name} 상담`,
-        customerName: user.name,
-        successUrl: SUCCESS_URL,
-        failUrl: FAIL_URL,
-      });
-
-      setStep('payment');
+      setStep('complete');
     } catch (err: any) {
-      Alert.alert('오류', err.message ?? '결제 준비에 실패했어요. 다시 시도해주세요.');
+      Alert.alert('오류', err.message ?? '예약 신청에 실패했어요. 다시 시도해주세요.');
     } finally {
       setLoadingPayment(false);
-    }
-  };
-
-  // ── Payment success ───────────────────────────────────────────────────────
-  const handlePaymentSuccess = async (paymentKey: string, orderId: string, amount: string) => {
-    setStep('complete');
-
-    try {
-      if (MOCK_PAYMENT) {
-        // 테스트 환경: edge function 없이 DB만 직접 업데이트
-        const { error } = await supabase
-          .from('bookings')
-          .update({ status: 'confirmed' })
-          .eq('id', orderId);
-        if (error) throw error;
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('post-payment', {
-        body: {
-          paymentKey,
-          orderId,
-          amount: Number(amount),
-          bookingId: orderId,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.roomUrl) {
-        setRoomUrl(data.roomUrl);
-      } else {
-        Alert.alert(
-          '상담방 준비 중',
-          '결제가 완료됐어요.\n상담방 생성이 지연되고 있어요. 잠시 후 예약 내역에서 다시 입장해주세요.',
-          [{ text: '확인' }]
-        );
-      }
-    } catch (err) {
-      console.error('결제 후처리 오류:', err);
-      Alert.alert(
-        '처리 오류',
-        '결제는 완료됐어요. 앱을 재시작하거나 고객센터로 문의해주세요.',
-        [{ text: '확인' }]
-      );
-    }
-  };
-
-  // ── Payment fail ──────────────────────────────────────────────────────────
-  const handlePaymentFail = async (code: string, message: string) => {
-    if (bookingId) {
-      await supabase
-        .from('bookings')
-        .update({ status: 'cancelled' })
-        .eq('id', bookingId)
-        .catch(() => null);
-      setBookingId(null);
-    }
-    setStep('confirm');
-    Alert.alert(
-      '결제 실패',
-      code === 'USER_CANCEL' ? '결제를 취소했어요.' : message || '결제에 실패했어요.'
-    );
-  };
-
-  // ── WebView interceptor ───────────────────────────────────────────────────
-  const onShouldStartLoadWithRequest = (request: ShouldStartLoadRequest): boolean => {
-    const { url } = request;
-
-    if (url.startsWith(SUCCESS_URL)) {
-      const query = url.includes('?') ? url.split('?')[1] : '';
-      const params = new URLSearchParams(query);
-      handlePaymentSuccess(
-        params.get('paymentKey') ?? '',
-        params.get('orderId') ?? '',
-        params.get('amount') ?? '0'
-      );
-      return false;
-    }
-
-    if (url.startsWith(FAIL_URL)) {
-      const query = url.includes('?') ? url.split('?')[1] : '';
-      const params = new URLSearchParams(query);
-      handlePaymentFail(
-        params.get('code') ?? 'UNKNOWN',
-        params.get('message') ?? '결제 실패'
-      );
-      return false;
-    }
-
-    return true;
-  };
-
-  // postMessage from WebView (fallback for SDK errors)
-  const onWebViewMessage = (event: { nativeEvent: { data: string } }) => {
-    try {
-      const msg = JSON.parse(event.nativeEvent.data) as { type: string; code?: string; message?: string };
-      if (msg.type === 'FAIL') {
-        handlePaymentFail(msg.code ?? 'PAYMENT_ERROR', msg.message ?? '결제 오류');
-      }
-    } catch {
-      // ignore malformed messages
     }
   };
 
@@ -638,93 +506,64 @@ export default function BookingScreen() {
         </ScrollView>
       )}
 
-      {/* ════════════════════════════════════════════
-          STEP 4 — PAYMENT (Modal WebView)
-      ════════════════════════════════════════════ */}
-      <Modal
-        visible={step === 'payment'}
-        animationType="slide"
-        onRequestClose={() => handlePaymentFail('USER_CANCEL', '결제를 취소했어요.')}
-      >
-        <View style={{ flex: 1, backgroundColor: C.white }}>
-          {/* WebView header */}
-          <View style={s.webHeader}>
-            <TouchableOpacity
-              style={s.closeBtn}
-              onPress={() => handlePaymentFail('USER_CANCEL', '결제를 취소했어요.')}
-            >
-              <Text style={{ fontSize: 16, color: C.brown, fontWeight: '600' }}>✕</Text>
-            </TouchableOpacity>
-            <Text style={s.webTitle}>결제</Text>
-            <View style={{ width: 36 }} />
-          </View>
-
-          <WebView
-            source={{ html: paymentHTML.current }}
-            style={{ flex: 1 }}
-            javaScriptEnabled
-            domStorageEnabled
-            onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
-            onMessage={onWebViewMessage}
-            startInLoadingState
-            renderLoading={() => (
-              <View style={s.webLoading}>
-                <ActivityIndicator size="large" color={C.brown} />
-                <Text style={s.webLoadingText}>결제 페이지 로딩 중...</Text>
-              </View>
-            )}
-          />
-        </View>
-      </Modal>
 
       {/* ════════════════════════════════════════════
           STEP 5 — COMPLETE
       ════════════════════════════════════════════ */}
       {step === 'complete' && (
-        <View style={[s.centered, { paddingHorizontal: 28 }]}>
+        <ScrollView contentContainerStyle={[s.centered, { paddingHorizontal: 28, paddingVertical: 40 }]}>
           <View style={s.completeCircle}>
-            <Text style={{ fontSize: 40, color: C.brown }}>✓</Text>
+            <Text style={{ fontSize: 40, color: C.brown }}>📋</Text>
           </View>
 
-          <Text style={s.completeTitle}>예약 완료!</Text>
+          <Text style={s.completeTitle}>예약 신청 완료!</Text>
           <Text style={s.completeSub}>
-            {counselor.name} 상담사와의{'\n'}상담이 예약되었어요 🎧
+            아래 계좌로 입금해 주시면{'\n'}관리자 확인 후 예약이 확정돼요
           </Text>
 
+          {/* 계좌 정보 */}
+          <View style={s.bankCard}>
+            <Text style={s.bankCardTitle}>입금 계좌 정보</Text>
+            <View style={s.bankRow}>
+              <Text style={s.bankLabel}>은행</Text>
+              <Text style={s.bankValue}>{BANK_NAME}</Text>
+            </View>
+            <View style={s.bankRow}>
+              <Text style={s.bankLabel}>계좌번호</Text>
+              <Text style={[s.bankValue, { letterSpacing: 1 }]}>{BANK_ACCOUNT}</Text>
+            </View>
+            <View style={s.bankRow}>
+              <Text style={s.bankLabel}>예금주</Text>
+              <Text style={s.bankValue}>{BANK_HOLDER}</Text>
+            </View>
+            <View style={[s.bankRow, s.bankAmountRow]}>
+              <Text style={s.bankLabel}>입금 금액</Text>
+              <Text style={s.bankAmount}>{counselor.hourly_rate.toLocaleString()}원</Text>
+            </View>
+          </View>
+
+          {/* 예약 요약 */}
           <View style={s.completeSummaryCard}>
-            <InfoRow label="날짜" value={selectedDate ?? ''} />
-            <InfoRow label="시간" value={`${selectedTime} 시작`} />
+            <InfoRow label="상담사" value={counselor.name} />
+            <InfoRow label="날짜"   value={selectedDate ?? ''} />
+            <InfoRow label="시간"   value={`${selectedTime} 시작`} />
             <InfoRow label="상담 시간" value={`${DURATION_MIN}분`} />
           </View>
 
-          <View style={{ width: '100%', gap: 12, marginTop: 8 }}>
-            {roomUrl && (
-              <TouchableOpacity
-                style={s.primaryBtn}
-                onPress={() =>
-                  router.replace({
-                    pathname: '/(user)/session',
-                    params: {
-                      roomUrl,
-                      bookingId: bookingId ?? '',
-                      counselorId: counselor.id,
-                      counselorName: counselor.name,
-                      counselorEmoji: counselor.avatar_emoji ?? '🎧',
-                    },
-                  } as any)
-                }
-              >
-                <Text style={s.primaryBtnText}>세션 입장하기  →</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={s.secondaryBtn}
-              onPress={() => router.replace('/(user)/home' as any)}
-            >
-              <Text style={s.secondaryBtnText}>홈으로 돌아가기</Text>
-            </TouchableOpacity>
+          <View style={s.noticeBox}>
+            <Text style={s.noticeText}>
+              💬 입금 확인 후 앱 알림으로 예약 확정을 안내해 드려요.{'\n'}
+              입금자명을 <Text style={{ fontWeight: '800' }}>{counselor.name} 상담</Text>으로 입력해 주세요.
+            </Text>
           </View>
-        </View>
+
+          <TouchableOpacity
+            style={[s.primaryBtn, { width: '100%', marginTop: 8 }]}
+            onPress={() => router.replace('/(user)/home' as any)}
+          >
+            <Text style={s.primaryBtnText}>홈으로 돌아가기</Text>
+          </TouchableOpacity>
+        </ScrollView>
       )}
 
       {/* ── Bottom CTA (wizard steps) ── */}
@@ -757,11 +596,6 @@ export default function BookingScreen() {
 
           {step === 'confirm' && (
             <>
-              {MOCK_PAYMENT && (
-                <View style={s.mockBanner}>
-                  <Text style={s.mockBannerText}>🧪 테스트 환경 — 가결제로 처리됩니다</Text>
-                </View>
-              )}
               <TouchableOpacity
                 style={[s.primaryBtn, loadingPayment && s.btnDisabled]}
                 disabled={loadingPayment}
@@ -771,9 +605,7 @@ export default function BookingScreen() {
                   <ActivityIndicator size="small" color={C.white} />
                 ) : (
                   <Text style={s.primaryBtnText}>
-                    {MOCK_PAYMENT
-                      ? `${counselor.hourly_rate.toLocaleString()}원 가결제 (테스트)`
-                      : `${counselor.hourly_rate.toLocaleString()}원 결제하기`}
+                    예약 신청하기
                   </Text>
                 )}
               </TouchableOpacity>
@@ -961,38 +793,26 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 60 },
   emptyTitle: { fontSize: 15, color: '#5a4633', fontWeight: '600' },
 
-  // WebView
-  webHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : 16,
-    paddingBottom: 12,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0ebe3',
+  // Bank transfer
+  bankCard: {
+    width: '100%', backgroundColor: '#ffffff', borderRadius: 16,
+    padding: 20, marginBottom: 16,
+    shadowColor: '#3d2c1e', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f5f0e8',
-    alignItems: 'center',
-    justifyContent: 'center',
+  bankCardTitle: { fontSize: 13, fontWeight: '800', color: '#8c7b6b', marginBottom: 14, letterSpacing: 0.5 },
+  bankRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#f5f0e8' },
+  bankAmountRow: { borderBottomWidth: 0, marginTop: 4 },
+  bankLabel: { fontSize: 14, color: '#8c7b6b', fontWeight: '500' },
+  bankValue: { fontSize: 14, color: '#3d2c1e', fontWeight: '700' },
+  bankAmount: { fontSize: 20, color: '#3d2c1e', fontWeight: '900' },
+
+  noticeBox: {
+    width: '100%', backgroundColor: '#fffbf0', borderRadius: 12,
+    padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: '#f0c98a',
   },
-  webTitle: { fontSize: 16, fontWeight: '700', color: '#3d2c1e' },
-  webLoading: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#faf8f5',
-  },
-  webLoadingText: { marginTop: 14, color: '#8c7b6b', fontSize: 13 },
+  noticeText: { fontSize: 13, color: '#5a4633', lineHeight: 20 },
 
   // Complete
   completeCircle: {
@@ -1053,13 +873,4 @@ const s = StyleSheet.create({
   secondaryBtnText: { fontSize: 15, fontWeight: '600', color: '#5a4633' },
   linkText: { fontSize: 13, color: '#8c7b6b', fontWeight: '500' },
 
-  mockBanner: {
-    backgroundColor: '#fef3c7',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-    alignItems: 'center',
-  },
-  mockBannerText: { fontSize: 12, color: '#92400e', fontWeight: '700' },
 });

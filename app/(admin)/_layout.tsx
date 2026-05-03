@@ -11,7 +11,7 @@ const C = {
 
 const TABS = [
   { label: '대시보드', icon: '📊', route: '/(admin)/dashboard' },
-  { label: '교육',     icon: '📚', route: '/(admin)/courses' },
+  { label: '입금확인', icon: '💳', route: '/(admin)/payments' },
   { label: '상담사',   icon: '🎧', route: '/(admin)/counselors' },
   { label: '공지',     icon: '📢', route: '/(admin)/notices' },
   { label: '정산',     icon: '💰', route: '/(admin)/settlements' },
@@ -102,6 +102,7 @@ export default function AdminLayout() {
           name="dashboard"
           options={{ title: '관리자 대시보드', headerRight: () => <AdminHeaderRight /> }}
         />
+        <Stack.Screen name="payments"    options={{ title: '입금 확인',         headerBackTitle: '돌아가기' }} />
         <Stack.Screen name="courses"     options={{ title: '교육 과정 관리',   headerBackTitle: '돌아가기' }} />
         <Stack.Screen name="counselors"  options={{ title: '상담사 관리',       headerBackTitle: '돌아가기' }} />
         <Stack.Screen name="notices"     options={{ title: '공지사항 관리',     headerBackTitle: '돌아가기' }} />

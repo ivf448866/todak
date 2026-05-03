@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { DevToolbar } from '@/components/DevToolbar';
 import { useAuthStore } from '@/stores/authStore';
 
 (StyleSheet as any).setFlag?.('darkMode', 'class');
@@ -83,7 +82,6 @@ export default function RootLayout() {
         <Stack.Screen name="(admin)"       options={{ headerShown: false }} />
         <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       </Stack>
-      <DevToolbar />
     </View>
   );
 }

@@ -55,7 +55,7 @@ export function buildPaymentHTML(params: PaymentHTMLParams): string {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>토닥 결제</title>
+  <title>토닥토닥 결제</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -107,7 +107,7 @@ export function buildPaymentHTML(params: PaymentHTMLParams): string {
 </head>
 <body>
   <div class="card">
-    <div class="logo">토닥</div>
+    <div class="logo">토닥토닥</div>
     <div class="tagline">귀 기울여 드려요</div>
 
     <div class="spinner-wrap">

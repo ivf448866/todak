@@ -12,10 +12,10 @@ const C = {
 } as const;
 
 const SHORTCUTS = [
-  { label: '교육 과정 관리', icon: '📚', route: '/(admin)/courses',     color: '#fef9c3' },
-  { label: '상담사 관리',   icon: '🎧', route: '/(admin)/counselors',   color: '#f0fdf4' },
-  { label: '공지사항',      icon: '📢', route: '/(admin)/notices',      color: '#fff7ed' },
-  { label: '정산 관리',     icon: '💰', route: '/(admin)/settlements',  color: '#f0f9ff' },
+  { label: '입금 확인',     icon: '💳', route: '/(admin)/payments',    color: '#fef9c3' },
+  { label: '상담사 관리',   icon: '🎧', route: '/(admin)/counselors',  color: '#f0fdf4' },
+  { label: '공지사항',      icon: '📢', route: '/(admin)/notices',     color: '#fff7ed' },
+  { label: '정산 관리',     icon: '💰', route: '/(admin)/settlements', color: '#f0f9ff' },
 ] as const;
 
 export default function AdminDashboard() {
